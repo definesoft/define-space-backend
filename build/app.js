@@ -59,6 +59,7 @@ var AWS = require("aws-sdk");
 var UserSubmissions_1 = require("./entity/UserSubmissions");
 var cors = require("cors");
 var Projects_1 = require("./entity/Projects");
+var auth_middleware_1 = require("./middleware/auth.middleware");
 //~/.aws/credentials -> Creds in this path
 var fileConfig = {
     Bucket: 'user-assignments-uploads',
@@ -66,7 +67,10 @@ var fileConfig = {
 };
 var passwordHelper = new password_1.PasswordHelper();
 var jwtHelper = new jwthelper_1.JwtHelper();
-var s3 = new AWS.S3();
+var s3 = new AWS.S3({
+    signatureVersion: 'v4',
+    region: 'ap-south-1'
+});
 var upload = multer({
     storage: multerS3({
         s3: s3,
@@ -90,6 +94,7 @@ var upload = multer({
     var app = express();
     app.use(express.json());
     app.use(cors());
+    app.use(function (req, res, next) { return (0, auth_middleware_1.AuthMiddleWare)(req, res, next); });
     // register routes
     app.post("/login", function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
@@ -105,11 +110,13 @@ var upload = multer({
                         userDetails = _b.sent();
                         if (userDetails) {
                             inputPassword = passwordHelper.generateHash(password);
+                            console.log('inputPassword', userDetails, password);
                             if (inputPassword === userDetails.password) {
                                 returnObject = {
                                     firstName: userDetails.firstName,
                                     lastName: userDetails.lastName,
-                                    userId: userDetails.id
+                                    userId: userDetails.id,
+                                    isAdmin: userDetails.isAdmin
                                 };
                                 return [2 /*return*/, res.send(__assign(__assign({}, returnObject), { token: jwtHelper.generateToken(returnObject) }))];
                             }
@@ -131,7 +138,7 @@ var upload = multer({
             });
         });
     });
-    app.get("/users/:id", function (req, res) {
+    app.get("/users/get-user-details/:id", function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
             var results;
             return __generator(this, function (_a) {
@@ -144,15 +151,15 @@ var upload = multer({
             });
         });
     });
-    app.get("/users/created-by/:id", function (req, res) {
+    app.get("/users/created-by-me", function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
             var results;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, userRepository.find({
-                            select: ['id', 'firstName', 'lastName', 'info'],
+                            select: ['id', 'firstName', 'lastName', 'info', 'userName', 'email'],
                             where: {
-                                createdBy: +req.params.id
+                                createdBy: +req.userDetails.userId
                             }
                         })];
                     case 1:
@@ -169,6 +176,8 @@ var upload = multer({
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 3, , 4]);
+                        req.body.createdBy = +req.userDetails.userId;
+                        req.body.password = process.env.INITIAL_PASSWORD;
                         return [4 /*yield*/, userRepository.create(req.body)];
                     case 1:
                         user = _a.sent();
@@ -190,7 +199,7 @@ var upload = multer({
             });
         });
     });
-    app.delete("/users/:id", function (req, res) {
+    app.delete("/users/delete-user/:id", function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
             var results;
             return __generator(this, function (_a) {
@@ -203,17 +212,18 @@ var upload = multer({
             });
         });
     });
-    app.post("/users/add-assignment", function (req, res) {
+    app.post("/users/submit-assignment", function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
             var user, results, error_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 3, , 4]);
-                        return [4 /*yield*/, userAssignmentsRepository.create(req.body)];
+                        req.body.submittedBy = +req.userDetails.userId;
+                        return [4 /*yield*/, userSubmissionsRepository.create(req.body)];
                     case 1:
                         user = _a.sent();
-                        return [4 /*yield*/, userAssignmentsRepository.save(user)];
+                        return [4 /*yield*/, userSubmissionsRepository.save(user)];
                     case 2:
                         results = _a.sent();
                         return [2 /*return*/, res.send({
@@ -231,30 +241,65 @@ var upload = multer({
             });
         });
     });
-    app.post("/users/submit-assignment", function (req, res) {
+    app.get('/users/check-is-admin', function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
-            var user, results, error_3;
+            var isAdmin;
+            return __generator(this, function (_a) {
+                isAdmin = req.userDetails.isAdmin;
+                return [2 /*return*/, res.send({ isAdmin: isAdmin })];
+            });
+        });
+    });
+    app.get("/users/submissions", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var userSubmissions, isAdmin, attachedUserDetails, error_3;
+            var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 3, , 4]);
-                        return [4 /*yield*/, userSubmissionsRepository.create(req.body)];
+                        _a.trys.push([0, 6, , 7]);
+                        userSubmissions = [];
+                        isAdmin = req.userDetails.isAdmin;
+                        if (!isAdmin) return [3 /*break*/, 2];
+                        return [4 /*yield*/, userSubmissionsRepository.find()];
                     case 1:
-                        user = _a.sent();
-                        return [4 /*yield*/, userSubmissionsRepository.save(user)];
-                    case 2:
-                        results = _a.sent();
-                        return [2 /*return*/, res.send({
-                                status: 1,
-                                message: 'Saved Sucessfully!'
-                            })];
+                        userSubmissions = _a.sent();
+                        return [3 /*break*/, 4];
+                    case 2: return [4 /*yield*/, userSubmissionsRepository.find({
+                            submittedBy: +req.userDetails.userId
+                        })];
                     case 3:
+                        userSubmissions = _a.sent();
+                        _a.label = 4;
+                    case 4: return [4 /*yield*/, Promise.all(userSubmissions.map(function (eachSubmission) { return __awaiter(_this, void 0, void 0, function () {
+                            var userDetails, projectDetails;
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0: return [4 /*yield*/, userRepository.findOne({
+                                            id: eachSubmission.submittedBy
+                                        })];
+                                    case 1:
+                                        userDetails = _a.sent();
+                                        return [4 /*yield*/, projectsRepository.findOne({
+                                                id: +eachSubmission.toProject
+                                            })];
+                                    case 2:
+                                        projectDetails = _a.sent();
+                                        return [2 /*return*/, __assign(__assign({}, eachSubmission), { name: userDetails ? "".concat(userDetails.firstName, " ").concat(userDetails.lastName) : null, projectName: projectDetails ? projectDetails.projectName : null })];
+                                }
+                            });
+                        }); }))];
+                    case 5:
+                        attachedUserDetails = _a.sent();
+                        return [2 /*return*/, res.send(attachedUserDetails)];
+                    case 6:
                         error_3 = _a.sent();
+                        console.log('error', error_3);
                         return [2 /*return*/, res.status(400).json({
                                 status: 0,
                                 message: "Can't create user"
                             })];
-                    case 4: return [2 /*return*/];
+                    case 7: return [2 /*return*/];
                 }
             });
         });
@@ -267,7 +312,7 @@ var upload = multer({
                     case 0:
                         _a.trys.push([0, 2, , 3]);
                         return [4 /*yield*/, userSubmissionsRepository.find({
-                                toUser: +req.params.id
+                                submittedBy: +req.params.id
                             })];
                     case 1:
                         userSubmissions = _a.sent();
@@ -279,6 +324,65 @@ var upload = multer({
                                 message: "Can't create user"
                             })];
                     case 3: return [2 /*return*/];
+                }
+            });
+        });
+    });
+    app.get("/users/details", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var userDetails, error_5;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, userRepository.findOne({
+                                select: ['firstName', 'lastName', 'info', 'email', 'userName'],
+                                where: {
+                                    id: +req.userDetails.userId
+                                }
+                            })];
+                    case 1:
+                        userDetails = _a.sent();
+                        return [2 /*return*/, res.send(userDetails)];
+                    case 2:
+                        error_5 = _a.sent();
+                        return [2 /*return*/, res.status(400).json({
+                                status: 0,
+                                message: "Can't get details"
+                            })];
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    });
+    app.put("/users/update-user", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var userDetails, error_6;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 3, , 4]);
+                        return [4 /*yield*/, userRepository.findOne({
+                                id: +req.userDetails.userId
+                            })];
+                    case 1:
+                        userDetails = _a.sent();
+                        userDetails.firstName = req.body.firstName;
+                        userDetails.lastName = req.body.lastName;
+                        userDetails.info = req.body.info;
+                        return [4 /*yield*/, userRepository.save(userDetails)];
+                    case 2:
+                        _a.sent();
+                        return [2 /*return*/, res.send({
+                                message: 'Updated User'
+                            })];
+                    case 3:
+                        error_6 = _a.sent();
+                        return [2 /*return*/, res.status(400).json({
+                                status: 0,
+                                message: "Can't get details"
+                            })];
+                    case 4: return [2 /*return*/];
                 }
             });
         });
@@ -295,6 +399,7 @@ var upload = multer({
                         })];
                 }
                 catch (error) {
+                    console.log('Error', error);
                     return [2 /*return*/, res.status(400).json({
                             status: 0,
                             message: "Can't create user"
@@ -317,12 +422,80 @@ var upload = multer({
             });
         });
     });
+    app.get("/dashboard-details", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, projectsRepository.find()];
+                    case 1:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send({
+                                totalProjects: results.length,
+                                totalCompletedProjects: results.filter(function (e) { return e.projectStatus == 'Completed'; }).length,
+                                totalInProgress: results.filter(function (e) { return e.projectStatus == 'In Progress'; }).length
+                            })];
+                }
+            });
+        });
+    });
+    app.delete("/delete-project/:id", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, projectsRepository.delete(req.params.id)];
+                    case 1:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
+    app.put("/projects", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var project, results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, projectsRepository.findOne({
+                            id: +req.body.id
+                        })];
+                    case 1:
+                        project = _a.sent();
+                        project.projectStatus = req.body.projectStatus;
+                        return [4 /*yield*/, projectsRepository.save(project)];
+                    case 2:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
+    app.post("/projects", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var project, results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        req.body.createdAt = new Date();
+                        return [4 /*yield*/, projectsRepository.create(req.body)];
+                    case 1:
+                        project = _a.sent();
+                        return [4 /*yield*/, projectsRepository.save(project)];
+                    case 2:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
     app.post("/uploadFile", upload.single('file'), function (req, res) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
                 try {
                     return [2 /*return*/, res.send({
                             status: 1,
+                            key: req.file.key,
                             message: 'Saved Sucessfully!'
                         })];
                 }

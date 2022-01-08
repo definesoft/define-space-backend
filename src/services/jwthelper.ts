@@ -9,8 +9,12 @@ export class JwtHelper {
     }
 
     validateToken(token: any) {
-        const validated = jwt.verify(token, process.env.JWT_KEY)
-        return validated;
+        try {            
+            const validated = jwt.verify(token, process.env.JWT_KEY)
+            return validated;
+        } catch (error) {
+            return false;
+        }
     }
 
 }

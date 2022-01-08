@@ -32,6 +32,10 @@ var Projects = /** @class */ (function () {
     ], Projects.prototype, "projectStatus", void 0);
     __decorate([
         (0, typeorm_1.Column)(),
+        __metadata("design:type", String)
+    ], Projects.prototype, "projectType", void 0);
+    __decorate([
+        (0, typeorm_1.Column)(),
         __metadata("design:type", Date)
     ], Projects.prototype, "createdAt", void 0);
     Projects = __decorate([

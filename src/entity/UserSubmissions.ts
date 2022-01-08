@@ -6,12 +6,12 @@ export class UserSubmissions {
 
     @PrimaryGeneratedColumn()
     submissionId: number;
-
-    @ManyToOne(type => User)
-    userDetails: User;
     
-    @RelationId((userSubmissions: UserSubmissions) => userSubmissions.userDetails)
-    toUser: number;
+    @Column()
+    submittedBy: number;
+
+    @Column()
+    toProject: string;
 
     @Column()
     submissionComments: string;

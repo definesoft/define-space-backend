@@ -11,6 +11,7 @@ import * as AWS from 'aws-sdk';
 import { UserSubmissions } from "./entity/UserSubmissions";
 import * as cors from 'cors';
 import { Projects } from "./entity/Projects";
+import { AuthMiddleWare } from "./middleware/auth.middleware";
 //~/.aws/credentials -> Creds in this path
 const fileConfig = {
     Bucket: 'user-assignments-uploads',
@@ -18,7 +19,10 @@ const fileConfig = {
 }
 const passwordHelper = new PasswordHelper();
 const jwtHelper = new JwtHelper();
-const s3 = new AWS.S3();
+const s3 = new AWS.S3({
+    signatureVersion: 'v4',
+    region: 'ap-south-1'
+});
 const upload = multer({
     storage: multerS3({
       s3: s3,
@@ -43,6 +47,7 @@ createConnection().then(connection => {
     const app = express();
     app.use(express.json());
     app.use(cors())
+    app.use((req, res, next) => AuthMiddleWare(req, res, next))
     // register routes
 
     app.post("/login", async function(req: Request, res: Response) {
@@ -51,12 +56,15 @@ createConnection().then(connection => {
             userName
         });
         if (userDetails) {
+            
             const inputPassword = passwordHelper.generateHash(password);
+            console.log('inputPassword', userDetails, password);
             if (inputPassword === userDetails.password) {
                 const returnObject = {
                         firstName: userDetails.firstName,
                         lastName: userDetails.lastName,
-                        userId: userDetails.id
+                        userId: userDetails.id,
+                        isAdmin: userDetails.isAdmin
                     };
                 return res.send({
                     ...returnObject,
@@ -76,24 +84,26 @@ createConnection().then(connection => {
         }
     });
 
-    app.get("/users/:id", async function(req: Request, res: Response) {
+    app.get("/users/get-user-details/:id", async function(req: Request, res: Response) {
         const results = await userRepository.findOne(req.params.id);
         return res.send(results);
     });
 
-    app.get("/users/created-by/:id", async function(req: Request, res: Response) {
+    app.get("/users/created-by-me", async function(req: Request | any, res: Response) {
         const results = await userRepository.find({
-            select: ['id', 'firstName', 'lastName', 'info'],
+            select: ['id', 'firstName', 'lastName', 'info', 'userName', 'email'],
             where: {
-                createdBy: +req.params.id
+                createdBy: +req.userDetails.userId
             }
         });
         return res.send(results);
     });
 
 
-    app.post("/users", async function(req: Request, res: Response) {   
+    app.post("/users", async function(req: Request | any, res: Response) {   
         try {
+            req.body.createdBy = +req.userDetails.userId;
+            req.body.password = process.env.INITIAL_PASSWORD;
             const user = await userRepository.create(req.body);
             const results = await userRepository.save(user);
             return res.send({
@@ -108,29 +118,14 @@ createConnection().then(connection => {
         }
     });
 
-    app.delete("/users/:id", async function(req: Request, res: Response) {
+    app.delete("/users/delete-user/:id", async function(req: Request, res: Response) {
         const results = await userRepository.delete(req.params.id);
         return res.send(results);
     });
 
-    app.post("/users/add-assignment", async function(req: Request, res: Response) {   
+    app.post("/users/submit-assignment", async function(req: Request | any, res: Response) {   
         try {
-            const user = await userAssignmentsRepository.create(req.body);
-            const results = await userAssignmentsRepository.save(user);
-            return res.send({
-                status: 1,
-                message: 'Saved Sucessfully!'
-            });   
-        } catch (error) {
-            return res.status(400).json({
-                status: 0,
-                message: `Can't create user`
-            })
-        }
-    });
-
-    app.post("/users/submit-assignment", async function(req: Request, res: Response) {   
-        try {
+            req.body.submittedBy = +req.userDetails.userId;
             const user = await userSubmissionsRepository.create(req.body);
             const results = await userSubmissionsRepository.save(user);
             return res.send({
@@ -145,16 +140,93 @@ createConnection().then(connection => {
         }
     });
 
+    app.get('/users/check-is-admin', async function(req: Request | any, res: Response) {
+        const { isAdmin } = req.userDetails;
+        return res.send({ isAdmin });
+    })
+
+    app.get("/users/submissions", async function(req: Request | any, res: Response) {   
+        try {
+            let userSubmissions = [];
+            const { isAdmin } = req.userDetails;
+            if (isAdmin) {
+                userSubmissions = await userSubmissionsRepository.find()
+            } else {
+                userSubmissions = await userSubmissionsRepository.find({
+                    submittedBy: +req.userDetails.userId
+                })
+            }
+            const attachedUserDetails = await Promise.all(userSubmissions.map(async eachSubmission => {
+                const userDetails = await userRepository.findOne({
+                    id: eachSubmission.submittedBy
+                })
+                const projectDetails = await projectsRepository.findOne({
+                    id: +eachSubmission.toProject
+                })
+                return {
+                    ...eachSubmission,
+                    name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : null,
+                    projectName: projectDetails ? projectDetails.projectName : null
+                }
+            }))
+            return res.send(attachedUserDetails);   
+        } catch (error) {
+            console.log('error', error);
+            
+            return res.status(400).json({
+                status: 0,
+                message: `Can't create user`
+            })
+        }
+    });
+
     app.get("/users/submissions/:id", async function(req: Request, res: Response) {   
         try {
             const userSubmissions = await userSubmissionsRepository.find({
-                toUser: +req.params.id
+                submittedBy: +req.params.id
             });
             return res.send(userSubmissions);   
         } catch (error) {
             return res.status(400).json({
                 status: 0,
                 message: `Can't create user`
+            })
+        }
+    });
+
+    app.get("/users/details", async function(req: Request | any, res: Response) {   
+        try {
+            const userDetails = await userRepository.findOne({
+                select: ['firstName', 'lastName', 'info', 'email', 'userName'],
+                where: {
+                    id: +req.userDetails.userId
+                }
+            })
+            return res.send(userDetails);
+        } catch (error) {
+            return res.status(400).json({
+                status: 0,
+                message: `Can't get details`
+            })
+        }
+    });
+
+    app.put("/users/update-user", async function(req: Request | any, res: Response) {   
+        try {
+            const userDetails = await userRepository.findOne({
+                id: +req.userDetails.userId
+            })
+            userDetails.firstName = req.body.firstName;
+            userDetails.lastName = req.body.lastName;
+            userDetails.info = req.body.info;
+            await userRepository.save(userDetails);
+            return res.send({
+                message: 'Updated User'
+            });
+        } catch (error) {
+            return res.status(400).json({
+                status: 0,
+                message: `Can't get details`
             })
         }
     });
@@ -171,6 +243,8 @@ createConnection().then(connection => {
                 link: signedUrl
             });
         } catch (error) {
+            console.log('Error', error);
+            
             return res.status(400).json({
                 status: 0,
                 message: `Can't create user`
@@ -183,10 +257,42 @@ createConnection().then(connection => {
         return res.send(results);
     });
 
-    app.post("/uploadFile", upload.single('file') , async function(req: Request, res: Response) {   
+    app.get("/dashboard-details", async function(req: Request, res: Response) {
+        const results = await projectsRepository.find();
+        
+        return res.send({
+            totalProjects: results.length,
+            totalCompletedProjects: results.filter(e => e.projectStatus == 'Completed').length,
+            totalInProgress: results.filter(e => e.projectStatus == 'In Progress').length
+        });
+    });
+
+    app.delete("/delete-project/:id", async function(req: Request, res: Response) {
+        const results = await projectsRepository.delete(req.params.id);
+        return res.send(results);
+    });
+
+    app.put("/projects", async function(req: Request, res: Response) {
+        const project = await projectsRepository.findOne({
+            id: +req.body.id
+        });
+        project.projectStatus = req.body.projectStatus;
+        const results = await projectsRepository.save(project)
+        return res.send(results);
+    });
+
+    app.post("/projects", async function(req: Request, res: Response) {
+        req.body.createdAt = new Date();
+        const project = await projectsRepository.create(req.body);
+        const results = await projectsRepository.save(project)
+        return res.send(results);
+    });
+
+    app.post("/uploadFile", upload.single('file') , async function(req: Request | any, res: Response) {   
         try {
             return res.send({
                 status: 1,
+                key: req.file.key,
                 message: 'Saved Sucessfully!'
             });   
         } catch (error) {

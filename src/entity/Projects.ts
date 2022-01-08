@@ -16,6 +16,9 @@ export class Projects {
     projectStatus: string;
 
     @Column()
+    projectType: string;
+
+    @Column()
     createdAt: Date;
 
 }

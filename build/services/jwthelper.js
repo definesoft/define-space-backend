@@ -10,8 +10,13 @@ var JwtHelper = /** @class */ (function () {
         return token;
     };
     JwtHelper.prototype.validateToken = function (token) {
-        var validated = jwt.verify(token, process.env.JWT_KEY);
-        return validated;
+        try {
+            var validated = jwt.verify(token, process.env.JWT_KEY);
+            return validated;
+        }
+        catch (error) {
+            return false;
+        }
     };
     return JwtHelper;
 }());

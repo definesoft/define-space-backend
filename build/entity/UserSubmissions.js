@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserSubmissions = void 0;
 var typeorm_1 = require("typeorm");
-var User_1 = require("./User");
 var UserSubmissions = /** @class */ (function () {
     function UserSubmissions() {
     }
@@ -20,13 +19,13 @@ var UserSubmissions = /** @class */ (function () {
         __metadata("design:type", Number)
     ], UserSubmissions.prototype, "submissionId", void 0);
     __decorate([
-        (0, typeorm_1.ManyToOne)(function (type) { return User_1.User; }),
-        __metadata("design:type", User_1.User)
-    ], UserSubmissions.prototype, "userDetails", void 0);
-    __decorate([
-        (0, typeorm_1.RelationId)(function (userSubmissions) { return userSubmissions.userDetails; }),
+        (0, typeorm_1.Column)(),
         __metadata("design:type", Number)
-    ], UserSubmissions.prototype, "toUser", void 0);
+    ], UserSubmissions.prototype, "submittedBy", void 0);
+    __decorate([
+        (0, typeorm_1.Column)(),
+        __metadata("design:type", String)
+    ], UserSubmissions.prototype, "toProject", void 0);
     __decorate([
         (0, typeorm_1.Column)(),
         __metadata("design:type", String)
