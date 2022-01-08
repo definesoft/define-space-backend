@@ -1,0 +1,11 @@
+{
+    "type": "mysql",
+    "host": "monkeytech.ccrvdf1e9a8h.us-east-2.rds.amazonaws.com",
+    "port": 3306,
+    "username": "monkey_tech",
+    "password": "monkey_tech",
+    "database": "definespace",
+    "entities": ["build/entity/*.js"],
+    "logging": true,
+    "synchronize": true
+}
