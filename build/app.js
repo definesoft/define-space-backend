@@ -60,6 +60,8 @@ var UserSubmissions_1 = require("./entity/UserSubmissions");
 var cors = require("cors");
 var Projects_1 = require("./entity/Projects");
 var auth_middleware_1 = require("./middleware/auth.middleware");
+var Leads_1 = require("./entity/Leads");
+var Remainder_1 = require("./entity/Remainder");
 //~/.aws/credentials -> Creds in this path
 var fileConfig = {
     Bucket: 'user-assignments-uploads',
@@ -90,6 +92,8 @@ var upload = multer({
     var userAssignmentsRepository = connection.getRepository(UserTaskAssignments_1.UserTaskAssignments);
     var userSubmissionsRepository = connection.getRepository(UserSubmissions_1.UserSubmissions);
     var projectsRepository = connection.getRepository(Projects_1.Projects);
+    var leadsRepository = connection.getRepository(Leads_1.Leads);
+    var remainderRepository = connection.getRepository(Remainder_1.Remainder);
     // create and setup express app
     var app = express();
     app.use(express.json());
@@ -485,6 +489,155 @@ var upload = multer({
                     case 2:
                         results = _a.sent();
                         return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
+    app.post("/add-lead", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var lead, results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        req.body.createdAt = new Date();
+                        req.body.userId = +req.userDetails.userId;
+                        return [4 /*yield*/, leadsRepository.create(req.body)];
+                    case 1:
+                        lead = _a.sent();
+                        return [4 /*yield*/, leadsRepository.save(lead)];
+                    case 2:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
+    app.post("/add-remainder", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var remainder, results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        req.body.userId = +req.userDetails.userId;
+                        return [4 /*yield*/, remainderRepository.create(req.body)];
+                    case 1:
+                        remainder = _a.sent();
+                        return [4 /*yield*/, remainderRepository.save(remainder)];
+                    case 2:
+                        results = _a.sent();
+                        return [2 /*return*/, res.send(results)];
+                }
+            });
+        });
+    });
+    app.post("/day-leads", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var todayRemainders, remainderWIthLeads, _a, _b;
+            var _this = this;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0: return [4 /*yield*/, remainderRepository.find({
+                            where: {
+                                userId: +req.userDetails.userId,
+                                day: req.body.day,
+                                month: req.body.month,
+                                year: req.body.year,
+                            }
+                        })];
+                    case 1:
+                        todayRemainders = _c.sent();
+                        remainderWIthLeads = todayRemainders.map(function (eachRemainder) { return __awaiter(_this, void 0, void 0, function () {
+                            var _a;
+                            var _b;
+                            return __generator(this, function (_c) {
+                                switch (_c.label) {
+                                    case 0:
+                                        _a = [__assign({}, eachRemainder)];
+                                        _b = {};
+                                        return [4 /*yield*/, leadsRepository.findOne({
+                                                id: eachRemainder.leadId
+                                            })];
+                                    case 1: return [2 /*return*/, __assign.apply(void 0, _a.concat([(_b.leadDetails = _c.sent(), _b)]))];
+                                }
+                            });
+                        }); });
+                        _b = (_a = res).send;
+                        return [4 /*yield*/, Promise.all(remainderWIthLeads)];
+                    case 2: return [2 /*return*/, _b.apply(_a, [_c.sent()])];
+                }
+            });
+        });
+    });
+    app.get("/leads/:leadId", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var leads, remainders;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, leadsRepository.findOne({
+                            where: {
+                                userId: +req.userDetails.userId,
+                                id: +req.params.leadId
+                            }
+                        })];
+                    case 1:
+                        leads = _a.sent();
+                        if (!leads) return [3 /*break*/, 3];
+                        return [4 /*yield*/, remainderRepository.find({
+                                where: {
+                                    leadId: leads.id
+                                }
+                            })];
+                    case 2:
+                        remainders = _a.sent();
+                        res.send({
+                            leadDetails: leads,
+                            remainders: remainders
+                        });
+                        return [3 /*break*/, 4];
+                    case 3: return [2 /*return*/, res.status(400).json({
+                            status: 0,
+                            message: "Can't get details"
+                        })];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
+    });
+    app.get("/leads", function (req, res) {
+        return __awaiter(this, void 0, void 0, function () {
+            var leads, leadsWithRemainders, _a, _b;
+            var _this = this;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0: return [4 /*yield*/, leadsRepository.find({
+                            where: {
+                                userId: +req.userDetails.userId
+                            }
+                        })];
+                    case 1:
+                        leads = _c.sent();
+                        leadsWithRemainders = leads.map(function (eachLead) { return __awaiter(_this, void 0, void 0, function () {
+                            var _a;
+                            var _b;
+                            return __generator(this, function (_c) {
+                                switch (_c.label) {
+                                    case 0:
+                                        _a = [__assign({}, eachLead)];
+                                        _b = {};
+                                        return [4 /*yield*/, remainderRepository.find({
+                                                where: {
+                                                    leadId: eachLead.id
+                                                }
+                                            })];
+                                    case 1: return [2 /*return*/, __assign.apply(void 0, _a.concat([(_b.remainders = _c.sent(), _b)]))];
+                                }
+                            });
+                        }); });
+                        _b = (_a = res).send;
+                        return [4 /*yield*/, Promise.all(leadsWithRemainders)];
+                    case 2:
+                        _b.apply(_a, [_c.sent()]);
+                        return [2 /*return*/];
                 }
             });
         });
